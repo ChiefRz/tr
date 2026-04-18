@@ -15,20 +15,39 @@ export default function TrackingPage() {
 
   useEffect(() => { fetchShippings(); }, []);
 
+  // FUNGSI TOGGLE YANG DIPERBAIKI UNTUK MENYIMPAN CHECKBOX BERKAS
   const toggleStatus = async (id, currentData, fieldTarget, subField = null) => {
+    // 1. Update Tampilan Seketika (Optimistic UI)
     setShippings((prev) => prev.map((ship) => {
       if (ship._id === id) {
-        if (subField) return { ...ship, [fieldTarget]: { ...ship[fieldTarget], [subField]: !ship[fieldTarget]?.[subField] } };
+        if (subField) {
+          return { ...ship, [fieldTarget]: { ...ship[fieldTarget], [subField]: !ship[fieldTarget]?.[subField] } };
+        }
         return { ...ship, [fieldTarget]: !ship[fieldTarget] };
       }
       return ship;
     }));
 
+    // 2. Siapkan Payload Database dengan teknik "Dot Notation" (misal: "berkas.coa": true)
+    // Ini MENCEGAH MongoDB menghapus nilai checkbox berkas yang lain
     const payload = {};
-    if (subField) payload[fieldTarget] = { ...currentData[fieldTarget], [subField]: !currentData[fieldTarget]?.[subField] };
-    else payload[fieldTarget] = !currentData[fieldTarget];
+    if (subField) {
+      payload[`${fieldTarget}.${subField}`] = !currentData[fieldTarget]?.[subField];
+    } else {
+      payload[fieldTarget] = !currentData[fieldTarget];
+    }
 
-    await fetch(`/api/shipping/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    // 3. Simpan ke Database
+    try {
+      await fetch(`/api/shipping/${id}`, { 
+        method: "PATCH", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify(payload) 
+      });
+    } catch (error) {
+      console.error("Gagal menyimpan status:", error);
+      fetchShippings(); // Kembalikan ke state awal jika gagal
+    }
   };
 
   const handleEditChange = (field, value) => {
@@ -99,7 +118,6 @@ export default function TrackingPage() {
         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Kelengkapan Berkas:</p>
           
-          {/* DAFTAR CHECKBOX BARU (Dibuat Grid 2 Kolom agar rapi) */}
           <div className="grid grid-cols-2 gap-2">
             <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
               <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.suratJalan || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "suratJalan")} /> Surat Jalan
