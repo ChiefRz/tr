@@ -2,12 +2,11 @@ import mongoose, { Schema } from "mongoose";
 
 const shippingSchema = new Schema(
   {
-    noPrk: { type: String, required: true },
+    // Tambahkan index: true karena noPrk sangat sering dicari
+    noPrk: { type: String, required: true, index: true }, 
     tanggal: { type: Date, required: true },
     alamat: { type: String, required: true },
     isTerkirim: { type: Boolean, default: false },
-    
-    // UPDATE BAGIAN BERKAS DI SINI
     berkas: {
       suratJalan: { type: Boolean, default: false },
       pengantarTimbangan: { type: Boolean, default: false },
@@ -16,7 +15,6 @@ const shippingSchema = new Schema(
       form: { type: Boolean, default: false },
       amplop: { type: Boolean, default: false },
     },
-    
     items: [
       {
         noSp: String,
@@ -28,6 +26,10 @@ const shippingSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Indeks tambahan untuk mempercepat pengurutan data terbaru
+shippingSchema.index({ createdAt: -1 }); 
+shippingSchema.index({ isTerkirim: 1 }); // Mempercepat pemisahan selesai/belum
 
 const Shipping = mongoose.models.Shipping || mongoose.model("Shipping", shippingSchema);
 export default Shipping;
