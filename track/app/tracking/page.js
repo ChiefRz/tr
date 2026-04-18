@@ -16,39 +16,55 @@ export default function TrackingPage() {
   useEffect(() => { fetchShippings(); }, []);
 
   // FUNGSI TOGGLE YANG DIPERBAIKI UNTUK MENYIMPAN CHECKBOX BERKAS
+  // Fungsi untuk mengecek apakah barang berhak mendapat COA
+  const checkCoaEligibility = (items) => {
+    if (!items || items.length === 0) return false;
+    const keywords = ["sriboga", "berill", "gula putih mataram"];
+    
+    // Return true jika ADA SALAH SATU barang yang mengandung kata kunci
+    return items.some(item => {
+      const detail = (item.detailBarang || "").toLowerCase();
+      return keywords.some(keyword => detail.includes(keyword));
+    });
+  };
+
   const toggleStatus = async (id, currentData, fieldTarget, subField = null) => {
-    // 1. Update Tampilan Seketika (Optimistic UI)
+    // 1. Tentukan nilai baru
+    const newValue = subField 
+        ? !currentData[fieldTarget]?.[subField] 
+        : !currentData[fieldTarget];
+
+    // 2. Update UI secara lokal (Optimistic Update)
     setShippings((prev) => prev.map((ship) => {
-      if (ship._id === id) {
+        if (ship._id === id) {
         if (subField) {
-          return { ...ship, [fieldTarget]: { ...ship[fieldTarget], [subField]: !ship[fieldTarget]?.[subField] } };
+            return { ...ship, [fieldTarget]: { ...(ship[fieldTarget] || {}), [subField]: newValue } };
         }
-        return { ...ship, [fieldTarget]: !ship[fieldTarget] };
-      }
-      return ship;
+        return { ...ship, [fieldTarget]: newValue };
+        }
+        return ship;
     }));
 
-    // 2. Siapkan Payload Database dengan teknik "Dot Notation" (misal: "berkas.coa": true)
-    // Ini MENCEGAH MongoDB menghapus nilai checkbox berkas yang lain
+    // 3. Kirim ke Database dengan Dot Notation
     const payload = {};
     if (subField) {
-      payload[`${fieldTarget}.${subField}`] = !currentData[fieldTarget]?.[subField];
+        payload[`${fieldTarget}.${subField}`] = newValue;
     } else {
-      payload[fieldTarget] = !currentData[fieldTarget];
+        payload[fieldTarget] = newValue;
     }
 
-    // 3. Simpan ke Database
     try {
-      await fetch(`/api/shipping/${id}`, { 
-        method: "PATCH", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify(payload) 
-      });
+        const res = await fetch(`/api/shipping/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error();
     } catch (error) {
-      console.error("Gagal menyimpan status:", error);
-      fetchShippings(); // Kembalikan ke state awal jika gagal
+        alert("Gagal menyimpan perubahan ke database");
+        fetchShippings(); // Reset data jika gagal
     }
-  };
+    };
 
   const handleEditChange = (field, value) => {
     setEditData({ ...editData, [field]: value });
@@ -67,95 +83,124 @@ export default function TrackingPage() {
   const saveEdit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    await fetch(`/api/shipping/${editData._id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editData)
-    });
-    setEditData(null);
-    setIsSaving(false);
-    fetchShippings();
-  };
+
+    // Salin data dan hapus _id agar tidak bentrok di database
+    const payload = { ...editData };
+        delete payload._id;
+        delete payload.createdAt;
+        delete payload.updatedAt;
+
+        try {
+        const res = await fetch(`/api/shipping/${editData._id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) throw new Error("Gagal menyimpan");
+
+        setEditData(null); // Tutup modal
+        fetchShippings();  // Refresh data layar
+        } catch (error) {
+        alert("Gagal menyimpan perubahan edit");
+        } finally {
+        setIsSaving(false);
+        }
+    };
 
   const pendingShippings = shippings.filter((ship) => !ship.isTerkirim);
   const completedShippings = shippings.filter((ship) => ship.isTerkirim);
 
-  const ShippingCard = ({ ship, isCompleted }) => (
-    <div className={`group border border-slate-100 p-5 rounded-2xl shadow-sm transition-all duration-300 flex flex-col md:flex-row justify-between gap-6 ${isCompleted ? 'bg-slate-50/50 opacity-80' : 'bg-gradient-to-r from-white to-slate-50 hover:shadow-md'}`}>
-      <div className="flex-1 relative">
-        <button onClick={() => setEditData(ship)} className="absolute top-0 right-0 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-lg font-semibold transition-colors">
-          ✎ Edit Data
-        </button>
+  const ShippingCard = ({ ship, isCompleted }) => {
+    // 1. Jalankan pengecekan COA untuk kartu pengiriman ini
+    const isCoaEligible = checkCoaEligibility(ship.items);
 
-        <div className="flex items-baseline gap-2 mb-1 pr-24">
-          <h3 className={`font-bold text-xl ${isCompleted ? 'text-slate-600 line-through' : 'text-indigo-900'}`}>PRK: {ship.noPrk}</h3>
-          <span className="text-sm font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-            {new Date(ship.tanggal).toLocaleDateString('id-ID')}
-          </span>
-        </div>
-        <p className="text-slate-600 mb-4 flex items-center gap-1"><span className="text-red-400">📍</span> {ship.alamat}</p>
-        
-        <div className={`p-3 rounded-xl border shadow-sm ${isCompleted ? 'bg-slate-100/50' : 'bg-white'}`}>
-          <ul className="text-sm space-y-1 text-slate-700">
-            {ship.items.map((it, i) => (
-              <li key={i} className="flex items-center gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full ${isCompleted ? 'bg-slate-400' : 'bg-indigo-300'}`}></span>
-                <span className="font-medium">SP: {it.noSp}</span> <span className="text-slate-300">|</span> 
-                <span>PO: {it.noPo}</span> <span className="text-slate-300">|</span> 
-                {it.detailBarang} <span className="font-semibold text-indigo-600">({it.jumlahBarang} qty)</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+    return (
+      <div className={`group border border-slate-100 p-5 rounded-2xl shadow-sm transition-all duration-300 flex flex-col md:flex-row justify-between gap-6 ${isCompleted ? 'bg-slate-50/50 opacity-80' : 'bg-gradient-to-r from-white to-slate-50 hover:shadow-md'}`}>
+        <div className="flex-1 relative">
+          <button onClick={() => setEditData(ship)} className="absolute top-0 right-0 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-lg font-semibold transition-colors">
+            ✎ Edit Data
+          </button>
 
-      <div className="flex flex-col gap-3 md:min-w-[320px] md:border-l md:border-slate-200 md:pl-6 justify-center">
-        <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border ${ship.isTerkirim ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-          <input type="checkbox" className="w-5 h-5 rounded text-green-600 cursor-pointer" checked={ship.isTerkirim} onChange={() => toggleStatus(ship._id, ship, "isTerkirim")} />
-          <span className="font-bold">{ship.isTerkirim ? "Sudah Dikirim" : "Belum Dikirim"}</span>
-        </label>
-        
-        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Kelengkapan Berkas:</p>
-          
-          <div className="grid grid-cols-2 gap-2">
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.suratJalan || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "suratJalan")} /> Surat Jalan
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.pengantarTimbangan || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "pengantarTimbangan")} /> Peng. Timbangan
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.daftarBerat || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "daftarBerat")} /> Daftar Berat
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.coa || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "coa")} /> COA
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.form || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "form")} /> Form
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-              <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.amplop || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "amplop")} /> Amplop
-            </label>
+          <div className="flex items-baseline gap-2 mb-1 pr-24">
+            <h3 className={`font-bold text-xl ${isCompleted ? 'text-slate-600 line-through' : 'text-indigo-900'}`}>PRK: {ship.noPrk}</h3>
+            <span className="text-sm font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+              {new Date(ship.tanggal).toLocaleDateString('id-ID')}
+            </span>
           </div>
+          <p className="text-slate-600 mb-4 flex items-center gap-1"><span className="text-red-400">📍</span> {ship.alamat}</p>
+          
+          <div className={`p-3 rounded-xl border shadow-sm ${isCompleted ? 'bg-slate-100/50' : 'bg-white'}`}>
+            <ul className="text-sm space-y-1 text-slate-700">
+              {ship.items.map((it, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isCompleted ? 'bg-slate-400' : 'bg-indigo-300'}`}></span>
+                  <span className="font-medium">SP: {it.noSp}</span> <span className="text-slate-300">|</span> 
+                  <span>PO: {it.noPo}</span> <span className="text-slate-300">|</span> 
+                  {it.detailBarang} <span className="font-semibold text-indigo-600">({it.jumlahBarang} qty)</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
 
+        <div className="flex flex-col gap-3 md:min-w-[320px] md:border-l md:border-slate-200 md:pl-6 justify-center">
+          <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border ${ship.isTerkirim ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+            <input type="checkbox" className="w-5 h-5 rounded text-green-600 cursor-pointer" checked={ship.isTerkirim} onChange={() => toggleStatus(ship._id, ship, "isTerkirim")} />
+            <span className="font-bold">{ship.isTerkirim ? "Sudah Dikirim" : "Belum Dikirim"}</span>
+          </label>
+          
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Kelengkapan Berkas:</p>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.suratJalan || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "suratJalan")} /> Surat Jalan
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.pengantarTimbangan || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "pengantarTimbangan")} /> Peng. Timbangan
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.daftarBerat || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "daftarBerat")} /> Daftar Berat
+              </label>
+              
+              {/* CHECKBOX COA YANG SUDAH DIBERI LOGIKA DISABLED */}
+              <label className={`flex items-center gap-2 text-sm font-medium ${isCoaEligible ? 'cursor-pointer text-slate-700 hover:text-indigo-600' : 'cursor-not-allowed text-slate-400 opacity-60'}`}>
+                <input 
+                  type="checkbox" 
+                  className={`w-4 h-4 rounded text-indigo-600 ${isCoaEligible ? 'cursor-pointer focus:ring-indigo-500' : 'cursor-not-allowed bg-slate-200'}`} 
+                  checked={ship.berkas?.coa || false} 
+                  onChange={() => isCoaEligible && toggleStatus(ship._id, ship, "berkas", "coa")} 
+                  disabled={!isCoaEligible} // Matikan input jika tidak memenuhi syarat
+                /> 
+                COA {isCoaEligible ? '' : ''}
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.form || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "form")} /> Form
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input type="checkbox" className="w-4 h-4 rounded text-indigo-600 cursor-pointer" checked={ship.berkas?.amplop || false} onChange={() => toggleStatus(ship._id, ship, "berkas", "amplop")} /> Amplop
+              </label>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 py-8 font-sans text-slate-800 relative">
       <div className="max-w-5xl mx-auto px-6">
         
         <div className="flex justify-between items-center mb-10 bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-slate-100">
-          <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 to-blue-500">Sistem Ekspedisi</h1>
+          
           <div className="flex gap-4">
-            <Link href="/" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-5 py-2 rounded-xl transition-colors">
-              📝 Input Data
+            <Link href="/" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-25 py-2 rounded-xl transition-colors">
+               Input Data
             </Link>
-            <button className="bg-blue-50 text-blue-700 font-semibold px-5 py-2 rounded-xl cursor-default">
-              📍 Daftar Tracking
+            <button className="bg-blue-50 text-blue-700 font-semibold px-25 py-2 rounded-xl cursor-default">
+               Daftar Tracking
             </button>
           </div>
         </div>
@@ -163,14 +208,14 @@ export default function TrackingPage() {
         <div className="bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
           
           <div className="mb-10">
-            <h3 className="text-lg font-bold text-orange-600 mb-4 flex items-center gap-2">⏳ Sedang Diproses <span className="bg-orange-100 text-orange-700 py-0.5 px-2.5 rounded-full text-sm">{pendingShippings.length}</span></h3>
+            <h3 className="text-lg font-bold text-orange-600 mb-4 flex items-center gap-2"> Sedang Diproses <span className="bg-orange-100 text-orange-700 py-0.5 px-2.5 rounded-full text-sm">{pendingShippings.length}</span></h3>
             <div className="space-y-5">
               {pendingShippings.map((ship) => <ShippingCard key={ship._id} ship={ship} isCompleted={false} />)}
             </div>
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-green-600 mb-4 flex items-center gap-2">✅ Selesai Dikirim <span className="bg-green-100 text-green-700 py-0.5 px-2.5 rounded-full text-sm">{completedShippings.length}</span></h3>
+            <h3 className="text-lg font-bold text-green-600 mb-4 flex items-center gap-2"> Selesai Dikirim <span className="bg-green-100 text-green-700 py-0.5 px-2.5 rounded-full text-sm">{completedShippings.length}</span></h3>
             <div className="space-y-5">
               {completedShippings.map((ship) => <ShippingCard key={ship._id} ship={ship} isCompleted={true} />)}
             </div>

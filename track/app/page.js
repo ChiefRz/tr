@@ -47,23 +47,20 @@ export default function InputPage() {
         
         {/* NAVIGASI */}
         <div className="flex justify-between items-center mb-10 bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-slate-100">
-          <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 to-blue-500">
-            Sistem Ekspedisi
-          </h1>
+          
           <div className="flex gap-4">
-            <button className="bg-indigo-50 text-indigo-700 font-semibold px-5 py-2 rounded-xl cursor-default">
-              ✏️ Input Data
+            <button className="bg-indigo-50 text-indigo-700 font-semibold px-25 py-2 rounded-xl cursor-default">
+               Input Data
             </button>
-            <Link href="/tracking" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-5 py-2 rounded-xl transition-colors">
-              📍 Lihat Tracking
+            <Link href="/tracking" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-25 py-2 rounded-xl transition-colors">
+               Lihat Tracking
             </Link>
           </div>
         </div>
 
         {/* FORM INPUT */}
         <div className="bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
-          <h2 className="text-2xl font-bold mb-6 text-slate-700 flex items-center gap-2">
-            <span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg text-sm">📝</span> 
+          <h2 className="text-2xl font-bold mb-6 text-slate-700 flex items-center gap-2"> 
             Input Daftar Kirim Baru
           </h2>
           
@@ -78,7 +75,7 @@ export default function InputPage() {
             </div>
 
             <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-50 mb-6">
-              <h3 className="font-semibold text-indigo-900 mb-4">Detail Barang (Multi SP/PO)</h3>
+              <h3 className="font-semibold text-indigo-900 mb-4">Detail Barang</h3>
               {formData.items.map((item, idx) => (
                 <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
                   <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="No SP" 
