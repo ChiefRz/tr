@@ -8,13 +8,45 @@ export default function InputPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     noPrk: "", tanggal: "", alamat: "",
-    items: [{ noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }]
+    // UPDATE: Tambahkan kodeBarang di sini
+    items: [{ kodeBarang: "", noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }]
   });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/shipping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        alert("✅ Berhasil! Data kiriman telah tersimpan dan stok telah dikurangi.");
+        setFormData({ 
+          noPrk: "", tanggal: "", alamat: "", 
+          items: [{ kodeBarang: "", noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }] 
+        });
+        router.push("/tracking");
+      } else {
+        // Akan menampilkan pesan jika stok kurang
+        alert(`❌ Gagal: ${result.message || "Terjadi kesalahan pada server"}`);
+      }
+    } catch (error) {
+      alert("❌ Terjadi kesalahan koneksi. Pastikan internet stabil.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const addItemRow = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }]
+      items: [...formData.items, { kodeBarang: "", noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }]
     });
   };
 
@@ -24,36 +56,21 @@ export default function InputPage() {
     setFormData({ ...formData, items: newItems });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    await fetch("/api/shipping", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData)
-    });
-    
-    // Reset form setelah sukses
-    setFormData({ noPrk: "", tanggal: "", alamat: "", items: [{ noSp: "", noPo: "", detailBarang: "", jumlahBarang: 1 }] });
-    setIsSubmitting(false);
-    
-    // Opsional: Langsung arahkan ke halaman tracking setelah input
-    router.push("/tracking");
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 py-8 font-sans text-slate-800">
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         
         {/* NAVIGASI */}
         <div className="flex justify-between items-center mb-10 bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-slate-100">
-          
-          <div className="flex gap-4">
-            <button className="bg-indigo-50 text-indigo-700 font-semibold px-25 py-2 rounded-xl cursor-default">
-               Input Data
+          <div className="flex gap-2 md:gap-4 flex-wrap justify-end">
+            <Link href="/stock" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-medium px-4 py-2 rounded-xl transition-colors">
+              Stok Gudang
+            </Link>
+            <button className="bg-indigo-50 text-indigo-700 font-semibold px-4 py-2 rounded-xl cursor-default">
+              Input Data
             </button>
-            <Link href="/tracking" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-25 py-2 rounded-xl transition-colors">
-               Lihat Tracking
+            <Link href="/tracking" className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 font-medium px-4 py-2 rounded-xl transition-colors">
+              Lihat Tracking
             </Link>
           </div>
         </div>
@@ -74,20 +91,26 @@ export default function InputPage() {
                 value={formData.alamat} onChange={(e) => setFormData({...formData, alamat: e.target.value})} />
             </div>
 
-            <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-50 mb-6">
-              <h3 className="font-semibold text-indigo-900 mb-4">Detail Barang</h3>
-              {formData.items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-                  <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="No SP" 
-                    value={item.noSp} onChange={(e) => handleItemChange(idx, "noSp", e.target.value)} />
-                  <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="No PO" 
-                    value={item.noPo} onChange={(e) => handleItemChange(idx, "noPo", e.target.value)} />
-                  <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="Detail Barang" 
-                    value={item.detailBarang} onChange={(e) => handleItemChange(idx, "detailBarang", e.target.value)} />
-                  <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" type="number" placeholder="Jumlah" 
-                    value={item.jumlahBarang} onChange={(e) => handleItemChange(idx, "jumlahBarang", e.target.value)} />
-                </div>
-              ))}
+            <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-50 mb-6 overflow-x-auto">
+              <h3 className="font-semibold text-indigo-900 mb-4">Detail Barang (Multi SP/PO)</h3>
+              
+              <div className="min-w-[600px]">
+                {formData.items.map((item, idx) => (
+                  // UPDATE: Ubah menjadi grid-cols-5
+                  <div key={idx} className="grid grid-cols-5 gap-3 mb-3">
+                    <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="Kode Barang" 
+                      value={item.kodeBarang} onChange={(e) => handleItemChange(idx, "kodeBarang", e.target.value.toUpperCase())} required />
+                    <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="No SP" 
+                      value={item.noSp} onChange={(e) => handleItemChange(idx, "noSp", e.target.value)}  />
+                    <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="No PO" 
+                      value={item.noPo} onChange={(e) => handleItemChange(idx, "noPo", e.target.value)}  />
+                    <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="Detail Barang" 
+                      value={item.detailBarang} onChange={(e) => handleItemChange(idx, "detailBarang", e.target.value)} required />
+                    <input className="border border-slate-200 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-indigo-300 outline-none" type="number" placeholder="Jumlah" 
+                      value={item.jumlahBarang} onChange={(e) => handleItemChange(idx, "jumlahBarang", e.target.value)} required />
+                  </div>
+                ))}
+              </div>
               
               <div className="mt-4 inline-block">
                 <button type="button" onClick={addItemRow} className="text-sm font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 px-4 py-2 rounded-lg transition-colors">
@@ -97,8 +120,12 @@ export default function InputPage() {
             </div>
 
             <div className="flex justify-end">
-              <button type="submit" disabled={isSubmitting} className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 text-white font-semibold px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center gap-2">
-                {isSubmitting ? "Menyimpan..." : "Simpan Data Kiriman"}
+              <button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className={`bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 text-white font-semibold px-8 py-3 rounded-xl shadow-lg transition-all flex items-center gap-2 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isSubmitting ? "Sedang Memeriksa Stok..." : "Simpan Data Kiriman"}
               </button>
             </div>
           </form>

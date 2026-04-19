@@ -17,10 +17,12 @@ const shippingSchema = new Schema(
     },
     items: [
       {
+        kodeBarang: String,
         noSp: String,
         noPo: String,
         detailBarang: String,
         jumlahBarang: Number,
+        isStockDeducted: { type: Boolean, default: false },
       },
     ],
   },
